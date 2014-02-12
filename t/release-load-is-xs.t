@@ -1,4 +1,3 @@
-#!perl
 
 BEGIN {
   unless ($ENV{RELEASE_TESTING}) {
@@ -7,9 +6,13 @@ BEGIN {
   }
 }
 
+use strict;
+use warnings;
 
 use Test::More;
 
-eval "use Test::Kwalitee";
-plan skip_all => "Test::Kwalitee required for testing kwalitee"
-  if $@;
+use DateTime;
+
+ok( ! $DateTime::IsPurePerl, 'Loading DateTime loaded the XS version' );
+
+done_testing();

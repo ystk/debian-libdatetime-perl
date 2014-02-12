@@ -1,26 +1,34 @@
 Source: libdatetime-perl
 Section: perl
-Priority: extra
-Build-Depends: perl, debhelper (>= 7),
- perl (>= 5.10.1) | libtest-simple-perl (>= 0.88), libparams-validate-perl,
- libdatetime-locale-perl (>= 1:0.41), libdatetime-timezone-perl (>= 1:1.09),
- libtest-exception-perl, libtest-warn-perl
+Priority: optional
+Build-Depends: perl, debhelper (>= 9.20120312),
+ libdatetime-locale-perl (>= 1:0.41),
+ libdatetime-timezone-perl (>= 1:1.09),
+ libmath-round-perl,
+ libparams-validate-perl,
+ libtest-fatal-perl,
+ libtest-warn-perl,
+ perl (>= 5.10.1) | libtest-simple-perl (>= 0.88),
+ perl (>= 5.11.4) | libmodule-build-perl (>= 0.360100)
 # don't build-depend on libdatetime-format-strptime-perl which depends
 # on libdatetime-perl again
 Maintainer: Debian Perl Group <pkg-perl-maintainers@lists.alioth.debian.org>
-Uploaders: Gunnar Wolf <gwolf@debian.org>, Antonio Radici <antonio@dyne.org>,
+Uploaders: Antonio Radici <antonio@dyne.org>,
  gregor herrmann <gregoa@debian.org>, Ryan Niebur <ryan@debian.org>,
  Iulian Udrea <iulian@ubuntu.com>, Jonathan Yu <jawnsy@cpan.org>,
- Ansgar Burchardt <ansgar@43-1.org>, Franck Joncourt <franck@debian.org>
-Standards-Version: 3.9.1
+ Ansgar Burchardt <ansgar@debian.org>, Franck Joncourt <franck@debian.org>,
+ Nicholas Bamber <nicholas@periapt.co.uk>
+Standards-Version: 3.9.3
 Homepage: http://datetime.perl.org/
-Vcs-Browser: http://svn.debian.org/viewsvn/pkg-perl/trunk/libdatetime-perl/
-Vcs-Svn: svn://svn.debian.org/pkg-perl/trunk/libdatetime-perl/
+Vcs-Browser: http://anonscm.debian.org/gitweb/?p=pkg-perl/packages/libdatetime-perl.git
+Vcs-Git: git://git.debian.org/pkg-perl/packages/libdatetime-perl.git
 
 Package: libdatetime-perl
 Architecture: any
 Depends: ${misc:Depends}, ${perl:Depends}, ${shlibs:Depends},
- libdatetime-locale-perl (>= 1:0.41), libdatetime-timezone-perl (>= 1:1.09),
+ libdatetime-locale-perl (>= 1:0.41),
+ libdatetime-timezone-perl (>= 1:1.09),
+ libmath-round-perl,
  libparams-validate-perl
 Description: module for manipulating dates, times and timestamps
  DateTime is a Perl module which aims to provide a complete, correct, and easy

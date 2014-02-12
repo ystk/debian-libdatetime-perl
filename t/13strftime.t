@@ -131,6 +131,45 @@ while ( defined( my $line = <DATA> ) ) {
     is( $dt->strftime('%%6N%n'), "%6N\n", '%%6N%n bug' );
 }
 
+{
+    # Internally this becomes 119999885 nanoseconds (floating point math is awesome)
+    my $epoch = 1297777805.12;
+    my $dt = DateTime->from_epoch( epoch => $epoch );
+
+    my @vals = (
+        1,
+        12,
+        120,
+        1200,
+        12000,
+        120000,
+        1200000,
+        12000000,
+        120000000,
+        1200000000,
+    );
+
+    my $x = 1;
+    for my $val (@vals) {
+        my $spec = '%' . $x++ . 'N';
+        is(
+            $dt->strftime($spec), $val,
+            "strftime($spec) for $epoch == $val"
+        );
+    }
+}
+
+{
+    my $dt = DateTime->new( year => 2011 );
+
+    for my $i (1..9) {
+        my $spec = '%' . $i . 'N';
+        my $expect = '0' x$i;
+
+        is( $dt->strftime($spec), $expect, "strftime $spec with 0 nanoseconds" );
+    }
+}
+
 done_testing();
 
 # add these if we do roman-numeral stuff
@@ -170,8 +209,8 @@ year => 1999, month => 9, day => 7, hour => 13, minute => 2, second => 42, nanos
 %M => '02'
 %N => '123456789'
 %3N => '123'
-%6N => '123456'
-%10N => '123456789'
+%6N => '123457'
+%10N => '1234567890'
 %p => 'PM'
 %r => '01:02:42 PM'
 %R => '13:02'
@@ -265,3 +304,15 @@ it
 %z => '+0000'
 %{month} => '9'
 %{year} => '1999'
+year => 2012, month => 1, day => 1
+%U => '01'
+%W => '00'
+year => 2012, month => 1, day => 10
+%U => '02'
+%W => '02'
+
+year => 1999, month => 9, day => 7, hour => 13, minute => 2, second => 42, nanosecond => 00012345678
+%N => '012345678'
+%3N => '012'
+%6N => '012346'
+%10N => '0123456780'

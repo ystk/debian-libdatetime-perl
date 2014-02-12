@@ -1,3 +1,100 @@
+libdatetime-perl (2:0.7500-1) unstable; urgency=low
+
+  * Team upload
+
+  [ gregor herrmann ]
+  * New upstream release 0.7400
+
+  [ Alessandro Ghedini ]
+  * New upstream release
+
+ -- Alessandro Ghedini <ghedo@debian.org>  Mon, 11 Jun 2012 20:30:45 +0200
+
+libdatetime-perl (2:0.7300-1) unstable; urgency=low
+
+  * New upstream release.
+  * debian/copyright: update to Copyright-Format 1.0.
+  * Bump Standards-Version to 3.9.3 (no changes).
+  * Build-depend on 9.20120312 to get all hardening flags.
+
+ -- gregor herrmann <gregoa@debian.org>  Sun, 18 Mar 2012 18:17:50 +0100
+
+libdatetime-perl (2:0.7200-1) unstable; urgency=low
+
+  [ Ansgar Burchardt ]
+  * debian/control: Convert Vcs-* fields to Git.
+
+  [ Salvatore Bonaccorso ]
+  * debian/copyright: Replace DEP5 Format-Specification URL from
+    svn.debian.org to anonscm.debian.org URL.
+
+  [ gregor herrmann ]
+  * New upstream release.
+  * Update years of upstream and packaging copyright.
+  * Build-Depends: replace libtest-exception-perl with libtest-fatal-perl.
+  * Switch to debhelper compatibility level 9 to pass CFLAGS to
+    Makefile.PL/Build.PL.
+
+ -- gregor herrmann <gregoa@debian.org>  Wed, 18 Jan 2012 20:28:40 +0100
+
+libdatetime-perl (2:0.7000-1) unstable; urgency=low
+
+  * New upstream release
+
+ -- Nicholas Bamber <nicholas@periapt.co.uk>  Sat, 14 May 2011 11:01:22 +0100
+
+libdatetime-perl (2:0.6900-1) unstable; urgency=low
+
+  [ Nicholas Bamber ]
+  * New upstream release
+
+  [ gregor herrmann ]
+  * Switch order of alternative (build) dependencies after the perl 5.12
+    upload.
+
+ -- Nicholas Bamber <nicholas@periapt.co.uk>  Thu, 05 May 2011 18:30:58 +0100
+
+libdatetime-perl (2:0.6700-1) unstable; urgency=low
+
+  * New upstream release
+  * Reviewed dependencies
+  * Updated copyright
+  * Added libmath-round-perl as a dependency
+  * Raised standards version to 3.9.2
+
+ -- Nicholas Bamber <nicholas@periapt.co.uk>  Mon, 25 Apr 2011 13:38:55 +0100
+
+libdatetime-perl (2:0.6600-1) unstable; urgency=low
+
+  [ Ansgar Burchardt ]
+  * Update my email address.
+
+  [ Salvatore Bonaccorso ]
+  * New upstream release
+  * Refresh debian/copyright file.
+
+ -- Ansgar Burchardt <ansgar@debian.org>  Mon, 01 Nov 2010 11:16:36 +0100
+
+libdatetime-perl (2:0.6500-1) unstable; urgency=low
+
+  [ Nicholas Bamber ]
+  * New upstream release
+  * Updated depedencies
+
+  [ Ansgar Burchardt ]
+  * debian/copyright: Refer to "Debian systems" instead of "Debian GNU/Linux
+    systems".
+
+ -- Nicholas Bamber <nicholas@periapt.co.uk>  Wed, 27 Oct 2010 20:49:38 +0100
+
+libdatetime-perl (2:0.6300-1) unstable; urgency=low
+
+  * Added myself to Uploaders and copyright
+  * New upstream release
+  * Moved Priority from 'extra' to 'optional'
+
+ -- Nicholas Bamber <nicholas@periapt.co.uk>  Sun, 03 Oct 2010 11:23:55 +0100
+
 libdatetime-perl (2:0.6100-2) unstable; urgency=low
 
   * Fix versioned runtime dependency on libdatetime-locale-perl, thanks to

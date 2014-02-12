@@ -1,6 +1,6 @@
 package DateTime::Infinite;
-BEGIN {
-  $DateTime::Infinite::VERSION = '0.61';
+{
+  $DateTime::Infinite::VERSION = '0.75';
 }
 
 use strict;
@@ -28,19 +28,17 @@ sub _seconds_as_components {
 }
 
 sub _stringify {
-    (
-        $_[0]->{utc_rd_days} == DateTime::INFINITY
+    $_[0]->{utc_rd_days} == DateTime::INFINITY
         ? DateTime::INFINITY . ''
-        : DateTime::NEG_INFINITY . ''
-    );
+        : DateTime::NEG_INFINITY . '';
 }
 
 sub STORABLE_freeze {return}
 sub STORABLE_thaw   {return}
 
 package DateTime::Infinite::Future;
-BEGIN {
-  $DateTime::Infinite::Future::VERSION = '0.61';
+{
+  $DateTime::Infinite::Future::VERSION = '0.75';
 }
 
 use base qw(DateTime::Infinite);
@@ -63,8 +61,8 @@ use base qw(DateTime::Infinite);
 }
 
 package DateTime::Infinite::Past;
-BEGIN {
-  $DateTime::Infinite::Past::VERSION = '0.61';
+{
+  $DateTime::Infinite::Past::VERSION = '0.75';
 }
 
 use base qw(DateTime::Infinite);
@@ -100,12 +98,12 @@ DateTime::Infinite - Infinite past and future DateTime objects
 
 =head1 VERSION
 
-version 0.61
+version 0.75
 
 =head1 SYNOPSIS
 
-  my $future = DateTime::Infinite::Future->new;
-  my $past   = DateTime::Infinite::Past->new;
+  my $future = DateTime::Infinite::Future->new();
+  my $past   = DateTime::Infinite::Past->new();
 
 =head1 DESCRIPTION
 
@@ -118,19 +116,19 @@ changed.
 =head1 BUGS
 
 There seem to be lots of problems when dealing with infinite numbers
-on Win32.  This may be a problem with this code, Perl, or Win32's IEEE
-math implementation.  Either way, the module may not be well-behaved
+on Win32. This may be a problem with this code, Perl, or Win32's IEEE
+math implementation. Either way, the module may not be well-behaved
 on Win32 operating systems.
 
 =head1 METHODS
 
 The only constructor for these two classes is the C<new()> method, as
-shown in the L<SYNOPSIS|/SYNOPSIS>.  This method takes no parameters.
+shown in the L<SYNOPSIS|/SYNOPSIS>. This method takes no parameters.
 
 All "get" methods in this module simply return infinity, positive or
-negative.  If the method is expected to return a string, it return the
+negative. If the method is expected to return a string, it return the
 string representation of positive or negative infinity used by your
-system.  For example, on my system calling C<year()> returns a number
+system. For example, on my system calling C<year()> returns a number
 which when printed appears either "inf" or "-inf".
 
 The object is not mutable, so the C<set()>, C<set_time_zone()>, and
@@ -152,11 +150,11 @@ Dave Rolsky <autarch@urth.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2010 by Dave Rolsky.
+This software is Copyright (c) 2012 by Dave Rolsky.
 
 This is free software, licensed under:
 
-  The Artistic License 2.0
+  The Artistic License 2.0 (GPL Compatible)
 
 =cut
 

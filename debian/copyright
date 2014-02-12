@@ -1,9 +1,10 @@
-Format-Specification: http://svn.debian.org/wsvn/dep/web/deps/dep5.mdwn?op=file&rev=135
-Maintainer: Dave Rolsky <autarch@urth.org>
+Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: DateTime
+Upstream-Contact: Dave Rolsky <autarch@urth.org>
 Source: http://search.cpan.org/dist/DateTime/
-Name: DateTime
 
-Copyright: 2010, Dave Rolsky <autarch@urth.org>
+Files: *
+Copyright: 2012, Dave Rolsky <autarch@urth.org>
 License: Artistic-2.0
 
 Files: c/ppport.h
@@ -14,14 +15,22 @@ License: Artistic or GPL-1+
 
 Files: debian/*
 Copyright: 2010, Franck Joncourt <franck@debian.org>
+ 2010-2011, Nicholas Bamber <nicholas@periapt.co.uk>
  2009-2010, Jonathan Yu <jawnsy@cpan.org>
  2009, Gunnar Wolf <gwolf@debian.org>
- 2009-2010, gregor herrmann <gregoa@debian.org>
+ 2009-2012, gregor herrmann <gregoa@debian.org>
  2009, Damyan Ivanov <dmn@debian.org>
  2009, Antonio Radici <antonio@dyne.org>
  2009, Ryan Niebur <ryan@debian.org>
  2003-2008, Piotr Roszatycki <dexter@debian.org>
 License: Artistic or GPL-1+
+
+License: Artistic
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the Artistic License, which comes with Perl.
+ .
+ On Debian systems, the complete text of the Artistic License can be
+ found in `/usr/share/common-licenses/Artistic'.
 
 License: Artistic-2.0
  Copyright (c) 2000-2006, The Perl Foundation.
@@ -214,18 +223,12 @@ License: Artistic-2.0
       DAMAGES ARISING IN ANY WAY OUT OF THE USE OF THE PACKAGE, EVEN
       IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-License: Artistic
- This program is free software; you can redistribute it and/or modify
- it under the terms of the Artistic License, which comes with Perl.
- .
- On Debian GNU/Linux systems, the complete text of the Artistic License
- can be found in `/usr/share/common-licenses/Artistic'
-
 License: GPL-1+
  This program is free software; you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
  the Free Software Foundation; either version 1, or (at your option)
  any later version.
  .
- On Debian GNU/Linux systems, the complete text of the GNU General Public
- License, version 1, can be found in `/usr/share/common-licenses/GPL-1'
+ On Debian systems, the complete text of the GNU General Public License,
+ version 1, can be found in `/usr/share/common-licenses/GPL-1'.
+
