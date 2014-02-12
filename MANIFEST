@@ -7,7 +7,6 @@ MANIFEST
 META.json
 META.yml
 README
-SIGNATURE
 TODO
 c/leap_seconds.h
 c/ppport.h
@@ -58,7 +57,6 @@ t/33seconds-offset.t
 t/34set-tz.t
 t/35rd-values.t
 t/36invalid-local.t
-t/36invalid_local.t
 t/37local-add.t
 t/38local-subtract.t
 t/39no-so.t
@@ -68,12 +66,14 @@ t/42duration-class.t
 t/43new-params.t
 t/44set-formatter.t
 t/author-test-all-my-deps.t
+t/release-cpan-changes.t
 t/release-eol.t
-t/release-kwalitee.t
+t/release-load-is-xs.t
 t/release-no-tabs.t
 t/release-pod-coverage.t
+t/release-pod-linkcheck.t
 t/release-pod-spell.t
-t/release-pod.t
+t/release-pod-syntax.t
 t/release-pp-00load.t
 t/release-pp-01sanity.t
 t/release-pp-02last-day.t
@@ -109,7 +109,6 @@ t/release-pp-33seconds-offset.t
 t/release-pp-34set-tz.t
 t/release-pp-35rd-values.t
 t/release-pp-36invalid-local.t
-t/release-pp-36invalid_local.t
 t/release-pp-37local-add.t
 t/release-pp-38local-subtract.t
 t/release-pp-40leap-years.t

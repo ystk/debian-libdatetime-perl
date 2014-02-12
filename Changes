@@ -1,3 +1,120 @@
+0.75   2012-06-11
+
+- The epoch for years 1-999 was broken because Time::Local is "clever". A pox
+  on all clever APIs, I say! Reported by Christian Hansen. RT #77719.
+
+- Shut up compilation warning from 5.17.x. Reported by Tom Wyant. RT #77490.
+
+
+0.74   2012-03-22
+
+- Small packaging fix for metacpan's benefit. No need to upgrade.
+
+
+0.73   2012-03-17
+
+- Change tests to work with Zefram's entirely rebuilt DateTime::TimeZone
+  distribution, which will replace the current implementation. Patch by
+  Zefram. RT #75757.
+
+
+0.72   2012-01-05
+
+- Remove Test::DependentModules from the dep list. This is used by some
+  author-only tests. Reported by Zefram.
+
+
+0.71   2012-01-05
+
+- There will be a new leap second on June 30, 2012.
+
+
+0.70   2011-05-09
+
+- Really fix %N, finally. This was breaking the DateTime::Event::Recurrence
+  test suite. Patch by Dagfinn Ilmari Mannsåker.
+
+
+0.69   2011-05-03
+
+- When a DateTime object had nanoseconds == 0, the %N strftime specifier
+  always returned "0" regardless of the precision requested. Reported by John
+  Siracusa. RT #67928.
+
+
+0.68   2011-04-25
+
+- The tests for %N in the last release relied on the vagaries of floating
+  point math on a 64-bit system. Now the from_epoch() method just uses string
+  operations to separate the epoch into an integer value and a mantissa. This
+  avoids floating point insanity. Reported by zefram. RT #67736.
+
+
+0.67   2011-04-24
+
+- The %N strftime specifier simply truncated nanoseconds, rather than rounding
+  them. Reported by Michael R. Davis. RT #66744.
+
+- The %U strftime specifier was off by one in years where January 1st was a
+  Sunday. Patch by Christian Hansen. RT #67631.
+
+- The %W strftime specifier was off by one in years where January 1st was a
+  Sunday or Monday. Patch by Christian Hansen. RT #67631.
+
+- Some small optimizations from Christian Hansen. The biggest impact is for
+  calculating week_of_month, week_number, and week_year.
+
+- This distro now requires Perl 5.8.1+ (it implicitly did this anyway now that
+  Params::Validate is 5.8.1+).
+
+
+0.66   2010-11-26
+
+- A bunch of documentation cleanup. No code changes.
+
+
+0.65   2010-10-25
+
+- Actually put the right $VERSION in every package. No other changes.
+
+
+0.64   2010-10-25
+
+* All the constructors besides new() ended up calling new(), which meant that
+  these constructors went through the parameter validation code
+  twice. Avoiding this should make everything that constructs a new object
+  (besides new() itself) a little faster.
+
+  ** This change breaks DateTime::Fiscal::Retail454, but no other modules, to
+     the best of my knowledge. **
+
+- The t/39no-so.t test failed for some people. I can't reproduce it, but this
+  release will hopefully fix the problem. Patch by Tokuhiro Matsuno. RT
+  #62061.
+
+- Added a section on the DateTime Project ecosystem to the docs. Addresses RT
+  #60930.
+
+- Fixed wiki links in the docs now that the wiki has moved to a new wiki
+  platform.
+
+- Restored some of the dzil-ification. The repo now has a very minimal
+  Build.PL file which is just enough to build the XS code and run the
+  tests. This fixes the total lack of prereqs in the META.* files. Reported by
+  Bjørn-Olav. RT #62427.
+
+
+0.63   2010-09-24
+
+- Actually bump the version in the module files. Oops. Reported by bricas.
+
+
+0.62   2010-09-23
+
+- Don't try to test with DateTime::Format::Strptime unless we have a
+  relatively recent version. Should fix some test failures.
+
+
 0.61   2010-07-16
 
 - Switching to dzil in 0.56 broke the --pp flag for the Build.PL. Reported by

@@ -1,6 +1,6 @@
 package DateTime::LeapSecond;
-BEGIN {
-  $DateTime::LeapSecond::VERSION = '0.61';
+{
+  $DateTime::LeapSecond::VERSION = '0.75';
 }
 
 use strict;
@@ -111,6 +111,7 @@ sub _initialize {
             1999  Jan. 1  +1
             2006  Jan. 1  +1
             2009  Jan. 1  +1
+            2012  Jun. 1  +1
             )
     );
 }
@@ -130,7 +131,7 @@ DateTime::LeapSecond - leap seconds table and utilities
 
 =head1 VERSION
 
-version 0.61
+version 0.75
 
 =head1 SYNOPSIS
 
@@ -138,13 +139,13 @@ version 0.61
   use DateTime::LeapSecond;
 
   print "Leap seconds between years 1990 and 2000 are ";
-  print Date::Leapsecond::leap_seconds( $utc_rd_2000 ) -
-        Date::Leapsecond::leap_seconds( $utc_rd_1990 );
+  print DateTime::Leapsecond::leap_seconds( $utc_rd_2000 ) -
+        DateTime::Leapsecond::leap_seconds( $utc_rd_1990 );
 
 =head1 DESCRIPTION
 
 This module is used to calculate leap seconds for a given Rata Die
-day.  It is used when DateTime.pm cannot compile the XS version of
+day. It is used when DateTime.pm cannot compile the XS version of
 this code.
 
 This library is known to be accurate for dates until December 2009.
@@ -183,11 +184,11 @@ Dave Rolsky <autarch@urth.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2010 by Dave Rolsky.
+This software is Copyright (c) 2012 by Dave Rolsky.
 
 This is free software, licensed under:
 
-  The Artistic License 2.0
+  The Artistic License 2.0 (GPL Compatible)
 
 =cut
 

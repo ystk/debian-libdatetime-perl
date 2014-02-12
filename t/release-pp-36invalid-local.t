@@ -1,3 +1,5 @@
+
+
 use Test::More;
 
 BEGIN {
@@ -13,49 +15,49 @@ use warnings;
 
 use Test::More;
 
-use DateTime::LeapSecond;
+use DateTime;
 
-is( DateTime::LeapSecond::leap_seconds(100), 0, 'before 1970' );
+my $badlt_rx = qr/Invalid local time|local time [0-9\-:T]+ does not exist/;
 
-# at the start of the table:
+{
+    eval {
+        DateTime->new(
+            year => 2003, month     => 4, day => 6,
+            hour => 2,    time_zone => 'America/Chicago',
+        );
+    };
 
-# 1972-06-30
-my $day = 720074;
-is( DateTime::LeapSecond::leap_seconds($day), 0,
-    'before leap-second transition' );
+    like( $@, $badlt_rx, 'exception for invalid time' );
 
-is( DateTime::LeapSecond::extra_seconds($day) + 0, 1, 'leap day' );
+    eval {
+        DateTime->new(
+            year      => 2003, month  => 4,  day    => 6,
+            hour      => 2,    minute => 59, second => 59,
+            time_zone => 'America/Chicago',
+        );
+    };
+    like( $@, $badlt_rx, 'exception for invalid time' );
+}
 
-# 1972-07-01
-$day = 720075;
-is( DateTime::LeapSecond::leap_seconds($day), 1,
-    'day after leap-second day' );
+{
+    eval {
+        DateTime->new(
+            year      => 2003, month  => 4,  day    => 6,
+            hour      => 1,    minute => 59, second => 59,
+            time_zone => 'America/Chicago',
+        );
+    };
+    ok( !$@, 'no exception for valid time' );
 
-is( DateTime::LeapSecond::extra_seconds($day), 0, 'not a leap day' );
+    my $dt = DateTime->new(
+        year      => 2003, month => 4, day => 5,
+        hour      => 2,
+        time_zone => 'America/Chicago',
+    );
 
-# 1972-07-02
-$day = 720076;
-is( DateTime::LeapSecond::leap_seconds($day), 1, 'after leap-second day' );
-
-# at the end of the table:
-# 1998-12-31
-$day = 729754;
-is( DateTime::LeapSecond::leap_seconds($day), 21, 'before leap-second day' );
-
-# 1999-01-01
-$day = 729755;
-is( DateTime::LeapSecond::leap_seconds($day), 22, 'leap-second day' );
-
-# 1999-01-02
-$day = 729756;
-is( DateTime::LeapSecond::leap_seconds($day), 22, 'after leap-second day' );
-
-# some leap second dates:
-# 1972  Jul. 1
-# 1973  Jan. 1
-# ...
-# 1997  Jul. 1
-# 1999  Jan. 1
+    eval { $dt->add( days => 1 ) };
+    like( $@, $badlt_rx, 'exception for invalid time produced via add' );
+}
 
 done_testing();
 
