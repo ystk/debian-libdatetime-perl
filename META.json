@@ -4,7 +4,7 @@
       "Dave Rolsky <autarch@urth.org>"
    ],
    "dynamic_config" : 0,
-   "generated_by" : "Dist::Zilla version 4.300018, CPAN::Meta::Converter version 2.120921",
+   "generated_by" : "Dist::Zilla version 5.015, CPAN::Meta::Converter version 2.120921",
    "license" : [
       "artistic_2"
    ],
@@ -24,14 +24,22 @@
             "Module::Build" : "0.3601"
          }
       },
+      "develop" : {
+         "requires" : {
+            "Test::More" : "0",
+            "Test::NoTabs" : "0",
+            "Test::Pod" : "1.41"
+         }
+      },
       "runtime" : {
          "requires" : {
             "Carp" : "0",
             "DateTime::Locale" : "0.41",
             "DateTime::TimeZone" : "1.09",
-            "Math::Round" : "0",
+            "POSIX" : "0",
             "Params::Validate" : "0.76",
             "Scalar::Util" : "0",
+            "Try::Tiny" : "0",
             "XSLoader" : "0",
             "base" : "0",
             "constant" : "0",
@@ -40,7 +48,8 @@
             "perl" : "5.008001",
             "strict" : "0",
             "vars" : "0",
-            "warnings" : "0"
+            "warnings" : "0",
+            "warnings::register" : "0"
          }
       },
       "test" : {
@@ -48,6 +57,7 @@
             "Storable" : "0",
             "Test::Fatal" : "0",
             "Test::More" : "0.88",
+            "Test::Warnings" : "0.005",
             "utf8" : "0"
          }
       }
@@ -64,6 +74,7 @@
          "web" : "http://git.urth.org/DateTime.pm.git"
       }
    },
-   "version" : "0.75"
+   "version" : "1.10",
+   "x_authority" : "cpan:DROLSKY"
 }
 

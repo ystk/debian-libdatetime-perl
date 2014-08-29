@@ -1,8 +1,5 @@
 package DateTime::Infinite;
-{
-  $DateTime::Infinite::VERSION = '0.75';
-}
-
+$DateTime::Infinite::VERSION = '1.10';
 use strict;
 use warnings;
 
@@ -37,9 +34,9 @@ sub STORABLE_freeze {return}
 sub STORABLE_thaw   {return}
 
 package DateTime::Infinite::Future;
-{
-  $DateTime::Infinite::Future::VERSION = '0.75';
-}
+$DateTime::Infinite::Future::VERSION = '1.10';
+use strict;
+use warnings;
 
 use base qw(DateTime::Infinite);
 
@@ -51,6 +48,7 @@ use base qw(DateTime::Infinite);
         local_rd_secs => DateTime::INFINITY,
         rd_nanosecs   => DateTime::INFINITY,
         tz            => DateTime::TimeZone->new( name => 'floating' ),
+        locale        => FakeLocale->instance(),
         },
         __PACKAGE__;
 
@@ -58,12 +56,12 @@ use base qw(DateTime::Infinite);
     $Pos->_calc_local_rd;
 
     sub new {$Pos}
-}
+ }
 
 package DateTime::Infinite::Past;
-{
-  $DateTime::Infinite::Past::VERSION = '0.75';
-}
+$DateTime::Infinite::Past::VERSION = '1.10';
+use strict;
+use warnings;
 
 use base qw(DateTime::Infinite);
 
@@ -75,6 +73,7 @@ use base qw(DateTime::Infinite);
         local_rd_secs => DateTime::NEG_INFINITY,
         rd_nanosecs   => DateTime::NEG_INFINITY,
         tz            => DateTime::TimeZone->new( name => 'floating' ),
+        locale        => FakeLocale->instance(),
         },
         __PACKAGE__;
 
@@ -84,11 +83,83 @@ use base qw(DateTime::Infinite);
     sub new {$Neg}
 }
 
+package    # hide from PAUSE
+    FakeLocale;
+
+use strict;
+use warnings;
+
+use DateTime::Locale;
+
+my $Instance;
+
+sub instance {
+    return $Instance ||= bless { locale => DateTime::Locale->load('en_US') },
+        __PACKAGE__;
+}
+
+sub id {
+    return 'infinite';
+}
+
+sub language_id {
+    return 'infinite';
+}
+
+sub name {
+    'Fake locale for Infinite DateTime objects';
+}
+
+sub language {
+    'Fake locale for Infinite DateTime objects';
+}
+
+my @methods = qw(
+    script_id
+    territory_id
+    variant_id
+    script
+    territory
+    variant
+    native_name
+    native_language
+    native_script
+    native_territory
+    native_variant
+);
+
+for my $meth (@methods) {
+    no strict 'refs';
+    *{$meth} = sub { undef };
+}
+
+# Totally arbitrary
+sub first_day_of_week {
+    return 1;
+}
+
+sub prefers_24_hour_time {
+    return 0;
+}
+
+our $AUTOLOAD;
+sub AUTOLOAD {
+    my $self = shift;
+
+    my ($meth) = $AUTOLOAD =~ /::(\w+)$/;
+
+    if ( $meth =~ /format/ && $meth !~ /^(?:day|month|quarter)/ ) {
+        return $self->{locale}->$meth(@_);
+    }
+
+    return [];
+}
+
 1;
 
 # ABSTRACT: Infinite past and future DateTime objects
 
-
+__END__
 
 =pod
 
@@ -98,7 +169,7 @@ DateTime::Infinite - Infinite past and future DateTime objects
 
 =head1 VERSION
 
-version 0.75
+version 1.10
 
 =head1 SYNOPSIS
 
@@ -150,15 +221,10 @@ Dave Rolsky <autarch@urth.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2012 by Dave Rolsky.
+This software is Copyright (c) 2014 by Dave Rolsky.
 
 This is free software, licensed under:
 
   The Artistic License 2.0 (GPL Compatible)
 
 =cut
-
-
-__END__
-
-
