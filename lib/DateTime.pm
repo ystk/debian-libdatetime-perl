@@ -1,19 +1,26 @@
 package DateTime;
-{
-  $DateTime::VERSION = '0.75';
-}
-
+$DateTime::VERSION = '1.10';
 use 5.008001;
 
 use strict;
 use warnings;
+use warnings::register;
+
+use Carp;
+use DateTime::Duration;
+use DateTime::Helpers;
+use DateTime::Locale 0.41;
+use DateTime::TimeZone 1.09;
+use Params::Validate 0.76
+    qw( validate validate_pos UNDEF SCALAR BOOLEAN HASHREF OBJECT );
+use POSIX qw(floor);
+use Try::Tiny;
 
 {
     my $loaded = 0;
 
     unless ( $ENV{PERL_DATETIME_PP} ) {
-        local $@;
-        eval {
+        try {
             require XSLoader;
             XSLoader::load(
                 __PACKAGE__,
@@ -22,12 +29,12 @@ use warnings;
                 : 42
             );
 
+            $loaded               = 1;
             $DateTime::IsPurePerl = 0;
+        }
+        catch {
+            die $_ if $_ && $_ !~ /object version|loadable object/;
         };
-
-        die $@ if $@ && $@ !~ /object version|loadable object/;
-
-        $loaded = 1 unless $@;
     }
 
     if ($loaded) {
@@ -38,15 +45,6 @@ use warnings;
         require DateTimePP;
     }
 }
-
-use Carp;
-use DateTime::Duration;
-use DateTime::Helpers;
-use DateTime::Locale 0.41;
-use DateTime::TimeZone 1.09;
-use Math::Round qw( nearest round );
-use Params::Validate 0.76
-    qw( validate validate_pos UNDEF SCALAR BOOLEAN HASHREF OBJECT );
 
 # for some reason, overloading doesn't work unless fallback is listed
 # early.
@@ -71,8 +69,8 @@ require DateTime::Infinite;
 
 use constant MAX_NANOSECONDS => 1_000_000_000;    # 1E9 = almost 32 bits
 
-use constant INFINITY     => ( 9**9**9 );
-use constant NEG_INFINITY => -1 * ( 9**9**9 );
+use constant INFINITY     => ( 100**100**100**100 );
+use constant NEG_INFINITY => -1 * ( 100**100**100**100 );
 use constant NAN          => INFINITY - INFINITY;
 
 use constant SECONDS_PER_DAY => 86400;
@@ -101,9 +99,7 @@ BEGIN {
         if (@_) {
             my $lang = shift;
 
-            DateTime::Locale->load($lang);
-
-            $DefaultLocale = $lang;
+            $DefaultLocale = DateTime::Locale->load($lang);
         }
 
         return $DefaultLocale;
@@ -202,7 +198,7 @@ sub new {
         "Invalid day of month (day = $p{day} - month = $p{month} - year = $p{year})\n"
         )
         if $p{day} > 28
-            && $p{day} > $class->_month_length( $p{year}, $p{month} );
+        && $p{day} > $class->_month_length( $p{year}, $p{month} );
 
     return $class->_new(%p);
 }
@@ -210,6 +206,9 @@ sub new {
 sub _new {
     my $class = shift;
     my %p     = @_;
+
+    Carp::croak('Constructor called with reference, we expected a package')
+        if ref $class;
 
     # If this method is called from somewhere other than new(), then some of
     # these default may not get applied.
@@ -224,14 +223,8 @@ sub _new {
     my $self = bless {}, $class;
 
     $p{locale} = delete $p{language} if exists $p{language};
-    $p{locale} = $class->DefaultLocale unless defined $p{locale};
 
-    if ( ref $p{locale} ) {
-        $self->{locale} = $p{locale};
-    }
-    else {
-        $self->{locale} = DateTime::Locale->load( $p{locale} );
-    }
+    $self->_set_locale( $p{locale} );
 
     $self->{tz} = (
         ref $p{time_zone}
@@ -249,8 +242,10 @@ sub _new {
     $self->{rd_nanosecs} = $p{nanosecond};
     $self->{formatter}   = $p{formatter};
 
-    $self->_normalize_nanoseconds( $self->{local_rd_secs},
-        $self->{rd_nanosecs} );
+    $self->_normalize_nanoseconds(
+        $self->{local_rd_secs},
+        $self->{rd_nanosecs}
+    );
 
     # Set this explicitly since it can't be calculated accurately
     # without knowing our time zone offset, and it's possible that the
@@ -259,6 +254,8 @@ sub _new {
     # as its equal or greater to the correct number, so we fudge by
     # adding one to the local year given to the constructor.
     $self->{utc_year} = $p{year} + 1;
+
+    $self->_maybe_future_dst_warning( $p{year}, $p{time_zone} );
 
     $self->_calc_utc_rd;
 
@@ -282,15 +279,35 @@ sub _new {
     return $self;
 }
 
+sub _set_locale {
+    my $self   = shift;
+    my $locale = shift;
+
+    if ( defined $locale && ref $locale ) {
+        $self->{locale} = $locale;
+    }
+    else {
+        $self->{locale}
+            = $locale
+            ? DateTime::Locale->load($locale)
+            : $self->DefaultLocale();
+    }
+
+    return;
+}
+
 # This method exists for the benefit of internal methods which create
 # a new object based on the current object, like set() and truncate().
 sub _new_from_self {
     my $self = shift;
     my %p    = @_;
 
-    my %old = map { $_ => $self->$_() }
-        qw( year month day hour minute second nanosecond
-        locale time_zone );
+    my %old = map { $_ => $self->$_() } qw(
+        year month day
+        hour minute second
+        nanosecond
+        locale time_zone
+    );
     $old{formatter} = $self->formatter()
         if defined $self->formatter();
 
@@ -382,8 +399,10 @@ sub _calc_utc_rd {
 
     # We account for leap seconds in the new() method and nowhere else
     # except date math.
-    $self->_normalize_tai_seconds( $self->{utc_rd_days},
-        $self->{utc_rd_secs} );
+    $self->_normalize_tai_seconds(
+        $self->{utc_rd_days},
+        $self->{utc_rd_secs}
+    );
 }
 
 sub _normalize_seconds {
@@ -392,12 +411,16 @@ sub _normalize_seconds {
     return if $self->{utc_rd_secs} >= 0 && $self->{utc_rd_secs} <= 86399;
 
     if ( $self->{tz}->is_floating ) {
-        $self->_normalize_tai_seconds( $self->{utc_rd_days},
-            $self->{utc_rd_secs} );
+        $self->_normalize_tai_seconds(
+            $self->{utc_rd_days},
+            $self->{utc_rd_secs}
+        );
     }
     else {
-        $self->_normalize_leap_seconds( $self->{utc_rd_days},
-            $self->{utc_rd_secs} );
+        $self->_normalize_leap_seconds(
+            $self->{utc_rd_days},
+            $self->{utc_rd_secs}
+        );
     }
 }
 
@@ -419,8 +442,10 @@ sub _calc_local_rd {
         $self->{local_rd_secs} = $self->{utc_rd_secs} + $offset;
 
         # intentionally ignore leap seconds here
-        $self->_normalize_tai_seconds( $self->{local_rd_days},
-            $self->{local_rd_secs} );
+        $self->_normalize_tai_seconds(
+            $self->{local_rd_days},
+            $self->{local_rd_secs}
+        );
 
         $self->{local_rd_secs} += $self->{offset_modifier};
     }
@@ -438,8 +463,10 @@ sub _calc_local_components {
         = $self->_rd2ymd( $self->{local_rd_days}, 1 );
 
     @{ $self->{local_c} }{qw( hour minute second )}
-        = $self->_seconds_as_components( $self->{local_rd_secs},
-        $self->{utc_rd_secs}, $self->{offset_modifier} );
+        = $self->_seconds_as_components(
+        $self->{local_rd_secs},
+        $self->{utc_rd_secs}, $self->{offset_modifier}
+        );
 }
 
 sub _calc_utc_components {
@@ -488,6 +515,7 @@ sub _utc_hms {
         my %p = validate( @_, $spec );
 
         my %args;
+
         # Epoch may come from Time::HiRes, so it may not be an integer.
         my ( $int, $dec ) = $p{epoch} =~ /^(-?\d+)?(\.\d+)?/;
         $int ||= 0;
@@ -504,14 +532,40 @@ sub _utc_hms {
 
         my $self = $class->_new( %p, %args, time_zone => 'UTC' );
 
+        my $tz = $p{time_zone};
+        $self->_maybe_future_dst_warning( $self->year(), $p{time_zone} );
+
         $self->set_time_zone( $p{time_zone} ) if exists $p{time_zone};
 
         return $self;
     }
 }
 
+sub now {
+    my $class = shift;
+    return $class->from_epoch( epoch => $class->_core_time(), @_ );
+}
+
+sub _maybe_future_dst_warning {
+    shift;
+    my $year = shift;
+    my $tz   = shift;
+
+    return unless $year >= 5000 && $tz;
+
+    my $tz_name = ref $tz ? $tz->name() : $tz;
+    return if $tz_name eq 'floating' || $tz_name eq 'UTC';
+
+    warnings::warnif(
+        "You are creating a DateTime object with a far future year ($year) and a time zone ($tz_name)."
+            . ' If the time zone you specified has future DST changes this will be very slow.'
+    );
+}
+
 # use scalar time in case someone's loaded Time::Piece
-sub now { shift->from_epoch( epoch => ( scalar time ), @_ ) }
+sub _core_time {
+    return scalar time;
+}
 
 sub today { shift->now(@_)->truncate( to => 'day' ) }
 
@@ -727,14 +781,8 @@ sub day_of_week_0 { $_[0]->{local_c}{day_of_week} - 1 }
 
 sub local_day_of_week {
     my $self = shift;
-
-    my $day = $self->day_of_week();
-
-    my $local_first_day = $self->{locale}->first_day_of_week();
-
-    my $d = ( ( 8 - $local_first_day ) + $day ) % 7;
-
-    return $d == 0 ? 7 : $d;
+    return 1
+        + ( $self->day_of_week - $self->{locale}->first_day_of_week ) % 7;
 }
 
 sub day_name { $_[0]->{locale}->day_format_wide->[ $_[0]->day_of_week_0() ] }
@@ -824,9 +872,9 @@ sub nanosecond {
     return $_[0]->{rd_nanosecs};
 }
 
-sub millisecond { round( $_[0]->{rd_nanosecs} / 1000000 ) }
+sub millisecond { floor( $_[0]->{rd_nanosecs} / 1000000 ) }
 
-sub microsecond { round( $_[0]->{rd_nanosecs} / 1000 ) }
+sub microsecond { floor( $_[0]->{rd_nanosecs} / 1000 ) }
 
 sub leap_seconds {
     my $self = shift;
@@ -900,7 +948,7 @@ sub _weeks_in_year {
 
     my $dow = $self->_ymd2rd( $year, 1, 1 ) % 7;
 
-    # Tears starting with a Thursday and leap years starting with a Wednesday
+    # Years starting with a Thursday and leap years starting with a Wednesday
     # have 53 weeks.
     return ( $dow == 4 || ( $dow == 3 && $self->_is_leap_year($year) ) )
         ? 53
@@ -959,20 +1007,20 @@ sub local_rd_as_seconds {
     ( $_[0]->{local_rd_days} * SECONDS_PER_DAY ) + $_[0]->{local_rd_secs};
 }
 
-# RD 1 is JD 1,721,424.5 - a simple offset
-sub jd {
+# RD 1 is MJD 678,576 - a simple offset
+sub mjd {
     my $self = shift;
 
-    my $jd = $self->{utc_rd_days} + 1_721_424.5;
+    my $mjd = $self->{utc_rd_days} - 678_576;
 
     my $day_length = $self->_day_length( $self->{utc_rd_days} );
 
-    return (  $jd
+    return (  $mjd
             + ( $self->{utc_rd_secs} / $day_length )
             + ( $self->{rd_nanosecs} / $day_length / MAX_NANOSECONDS ) );
 }
 
-sub mjd { $_[0]->jd - 2_400_000.5 }
+sub jd { $_[0]->mjd + 2_400_000.5 }
 
 {
     my %strftime_patterns = (
@@ -992,12 +1040,12 @@ sub mjd { $_[0]->jd - 2_400_000.5 }
         'G' => sub { $_[0]->week_year },
         'H' => sub { sprintf( '%02d', $_[0]->hour ) },
         'I' => sub { sprintf( '%02d', $_[0]->hour_12 ) },
-        'j' => sub { $_[0]->day_of_year },
+        'j' => sub { sprintf( '%03d', $_[0]->day_of_year ) },
         'k' => sub { sprintf( '%2d', $_[0]->hour ) },
         'l' => sub { sprintf( '%2d', $_[0]->hour_12 ) },
         'm' => sub { sprintf( '%02d', $_[0]->month ) },
         'M' => sub { sprintf( '%02d', $_[0]->minute ) },
-        'n' => sub {"\n"},                     # should this be OS-sensitive?
+        'n' => sub { "\n" },                   # should this be OS-sensitive?
         'N' => \&_format_nanosecs,
         'p' => sub { $_[0]->am_or_pm() },
         'P' => sub { lc $_[0]->am_or_pm() },
@@ -1005,7 +1053,7 @@ sub mjd { $_[0]->jd - 2_400_000.5 }
         'R' => sub { $_[0]->strftime('%H:%M') },
         's' => sub { $_[0]->epoch },
         'S' => sub { sprintf( '%02d', $_[0]->second ) },
-        't' => sub {"\t"},
+        't' => sub { "\t" },
         'T' => sub { $_[0]->strftime('%H:%M:%S') },
         'u' => sub { $_[0]->day_of_week },
         'U' => sub {
@@ -1031,7 +1079,7 @@ sub mjd { $_[0]->jd - 2_400_000.5 }
         'Y' => sub { return $_[0]->year },
         'z' => sub { DateTime::TimeZone->offset_as_string( $_[0]->offset ) },
         'Z' => sub { $_[0]->{tz}->short_name_for_datetime( $_[0] ) },
-        '%' => sub {'%'},
+        '%' => sub { '%' },
     );
 
     $strftime_patterns{h} = $strftime_patterns{b};
@@ -1203,8 +1251,10 @@ sub mjd { $_[0]->jd - 2_400_000.5 }
         # spec is not all that clear.
         qr/(S+)/ => sub {
             my $l   = length $1;
-            my $val = sprintf( "%.${l}f",
-                $_[0]->fractional_second() - $_[0]->second() );
+            my $val = sprintf(
+                "%.${l}f",
+                $_[0]->fractional_second() - $_[0]->second()
+            );
             $val =~ s/^0\.//;
             $val || 0;
         },
@@ -1213,7 +1263,15 @@ sub mjd { $_[0]->jd - 2_400_000.5 }
 
         qr/zzzz/   => sub { $_[0]->time_zone_long_name() },
         qr/z{1,3}/ => sub { $_[0]->time_zone_short_name() },
-        qr/ZZZZ/   => sub {
+        qr/ZZZZZ/  => sub {
+            substr(
+                my $z
+                    = DateTime::TimeZone->offset_as_string( $_[0]->offset() ),
+                -2, 0, ":"
+            );
+            $z;
+        },
+        qr/ZZZZ/ => sub {
             $_[0]->time_zone_short_name()
                 . DateTime::TimeZone->offset_as_string( $_[0]->offset() );
         },
@@ -1284,7 +1342,7 @@ sub mjd { $_[0]->jd - 2_400_000.5 }
         my $self    = shift;
         my $pattern = shift;
 
-        for ( my $i = 0; $i < @patterns; $i += 2 ) {
+        for ( my $i = 0 ; $i < @patterns ; $i += 2 ) {
             if ( $pattern =~ /$patterns[$i]/ ) {
                 my $sub = $patterns[ $i + 1 ];
 
@@ -1304,7 +1362,7 @@ sub _format_nanosecs {
 
     return sprintf(
         '%0' . $precision . 'u',
-        round( $self->{rd_nanosecs} / $divide_by )
+        floor( $self->{rd_nanosecs} / $divide_by )
     );
 }
 
@@ -1331,8 +1389,8 @@ sub hires_epoch {
     return $epoch + $nano;
 }
 
-sub is_finite   {1}
-sub is_infinite {0}
+sub is_finite   { 1 }
+sub is_infinite { 0 }
 
 # added for benefit of DateTime::TimeZone
 sub utc_year { $_[0]->{utc_year} }
@@ -1395,8 +1453,7 @@ sub subtract_datetime {
             if (
             $bigger->is_dst
             && do {
-                local $@;
-                my $prev_day = eval { $bigger->clone->subtract( days => 1 ) };
+                my $prev_day = try { $bigger->clone->subtract( days => 1 ) };
                 $prev_day && !$prev_day->is_dst ? 1 : 0;
             }
             );
@@ -1407,8 +1464,7 @@ sub subtract_datetime {
             if (
             !$bigger->is_dst
             && do {
-                local $@;
-                my $prev_day = eval { $bigger->clone->subtract( days => 1 ) };
+                my $prev_day = try { $bigger->clone->subtract( days => 1 ) };
                 $prev_day && $prev_day->is_dst ? 1 : 0;
             }
             );
@@ -1633,8 +1689,15 @@ sub add {
 
 sub subtract {
     my $self = shift;
+    my %p    = @_;
 
-    return $self->subtract_duration( $self->duration_class->new(@_) );
+    my %eom;
+    $eom{end_of_month} = delete $p{end_of_month}
+        if exists $p{end_of_month};
+
+    my $dur = $self->duration_class->new(@_)->inverse(%eom);
+
+    return $self->add_duration($dur);
 }
 
 sub subtract_duration { return $_[0]->add_duration( $_[1]->inverse ) }
@@ -1723,8 +1786,10 @@ sub subtract_duration { return $_[0]->add_duration( $_[1]->inverse ) }
             $self->{utc_rd_secs} += $deltas{minutes} * 60;
 
             # This intentionally ignores leap seconds
-            $self->_normalize_tai_seconds( $self->{utc_rd_days},
-                $self->{utc_rd_secs} );
+            $self->_normalize_tai_seconds(
+                $self->{utc_rd_days},
+                $self->{utc_rd_secs}
+            );
         }
 
         if ( $deltas{seconds} || $deltas{nanoseconds} ) {
@@ -1732,8 +1797,10 @@ sub subtract_duration { return $_[0]->add_duration( $_[1]->inverse ) }
 
             if ( $deltas{nanoseconds} ) {
                 $self->{rd_nanosecs} += $deltas{nanoseconds};
-                $self->_normalize_nanoseconds( $self->{utc_rd_secs},
-                    $self->{rd_nanosecs} );
+                $self->_normalize_nanoseconds(
+                    $self->{utc_rd_secs},
+                    $self->{rd_nanosecs}
+                );
             }
 
             $self->_normalize_seconds;
@@ -1890,8 +1957,29 @@ sub set_hour       { $_[0]->set( hour       => $_[1] ) }
 sub set_minute     { $_[0]->set( minute     => $_[1] ) }
 sub set_second     { $_[0]->set( second     => $_[1] ) }
 sub set_nanosecond { $_[0]->set( nanosecond => $_[1] ) }
-sub set_locale     { $_[0]->set( locale     => $_[1] ) }
-sub set_formatter  { $_[0]->set( formatter  => $_[1] ) }
+
+# These two are special cased because ... if the local time is the hour of a
+# DST change where the same local time occurs twice then passing it through
+# _new() can actually change the underlying UTC time, which is bad.
+
+sub set_locale {
+    my $self = shift;
+
+    my ($locale) = validate_pos( @_, $BasicValidate->{locale} );
+
+    $self->_set_locale($locale);
+
+    return $self;
+}
+
+sub set_formatter {
+    my $self = shift;
+    my ($formatter) = validate_pos( @_, $BasicValidate->{formatter} );
+
+    $self->{formatter} = $formatter;
+
+    return $self;
+}
 
 {
     my %TruncateDefault = (
@@ -1902,23 +1990,37 @@ sub set_formatter  { $_[0]->set( formatter  => $_[1] ) }
         second     => 0,
         nanosecond => 0,
     );
-    my $re = join '|', 'year', 'week',
+    my $re = join '|', 'year', 'week', 'local_week',
         grep { $_ ne 'nanosecond' } keys %TruncateDefault;
-    my $spec = { to => { regex => qr/^(?:$re)/ } };
+    my $spec = { to => { regex => qr/^(?:$re)$/ } };
 
     sub truncate {
         my $self = shift;
         my %p = validate( @_, $spec );
 
         my %new;
-        if ( $p{to} eq 'week' ) {
-            my $day_diff = $self->day_of_week - 1;
+        if ( $p{to} eq 'week' || $p{to} eq 'local_week' ) {
+            my $first_day_of_week
+                = ( $p{to} eq 'local_week' )
+                ? $self->{locale}->first_day_of_week
+                : 1;
+
+            my $day_diff = ( $self->day_of_week - $first_day_of_week ) % 7;
 
             if ($day_diff) {
                 $self->add( days => -1 * $day_diff );
             }
 
-            return $self->truncate( to => 'day' );
+            # This can fail if the truncate ends up giving us an invalid local
+            # date time. If that happens we need to reverse the addition we
+            # just did. See https://rt.cpan.org/Ticket/Display.html?id=93347.
+            try {
+                $self->truncate( to => 'day' );
+            }
+            catch {
+                $self->add( days => $day_diff );
+                die $_;
+            };
         }
         else {
             my $truncate;
@@ -1941,23 +2043,43 @@ sub set_formatter  { $_[0]->set( formatter  => $_[1] ) }
 sub set_time_zone {
     my ( $self, $tz ) = @_;
 
-    # This is a bit of a hack but it works because time zone objects
-    # are singletons, and if it doesn't work all we lose is a little
-    # bit of speed.
-    return $self if $self->{tz} eq $tz;
+    if ( ref $tz ) {
+
+        # This is a bit of a hack but it works because time zone objects
+        # are singletons, and if it doesn't work all we lose is a little
+        # bit of speed.
+        return $self if $self->{tz} eq $tz;
+    }
+    else {
+        return $self if $self->{tz}->name() eq $tz;
+    }
 
     my $was_floating = $self->{tz}->is_floating;
 
+    my $old_tz = $self->{tz};
     $self->{tz} = ref $tz ? $tz : DateTime::TimeZone->new( name => $tz );
 
     $self->_handle_offset_modifier( $self->second, 1 );
 
-    # if it either was or now is floating (but not both)
-    if ( $self->{tz}->is_floating xor $was_floating ) {
-        $self->_calc_utc_rd;
+    my $e;
+    try {
+        # if it either was or now is floating (but not both)
+        if ( $self->{tz}->is_floating xor $was_floating ) {
+            $self->_calc_utc_rd;
+        }
+        elsif ( !$was_floating ) {
+            $self->_calc_local_rd;
+        }
     }
-    elsif ( !$was_floating ) {
-        $self->_calc_local_rd;
+    catch {
+        $e = $_;
+    };
+
+    # If we can't recalc the RD values then we shouldn't keep the new TZ. RT
+    # #83940
+    if ($e) {
+        $self->{tz} = $old_tz;
+        die $e;
     }
 
     return $self;
@@ -1977,7 +2099,7 @@ sub STORABLE_freeze {
     }
 
     # not used yet, but may be handy in the future.
-    $serialized .= "version:$DateTime::VERSION";
+    $serialized .= 'version:' . ( $DateTime::VERSION || 'git' );
 
     # Formatter needs to be returned as a reference since it may be
     # undef or a class name, and Storable will complain if extra
@@ -2032,7 +2154,7 @@ sub STORABLE_thaw {
     return $self;
 }
 
-package
+package    # hide from PAUSE
     DateTime::_Thawed;
 
 sub utc_rd_values { @{ $_[0]->{utc_vals} } }
@@ -2043,7 +2165,7 @@ sub time_zone { $_[0]->{tz} }
 
 # ABSTRACT: A date and time object
 
-
+__END__
 
 =pod
 
@@ -2053,7 +2175,7 @@ DateTime - A date and time object
 
 =head1 VERSION
 
-version 0.75
+version 1.10
 
 =head1 SYNOPSIS
 
@@ -2214,13 +2336,13 @@ datetimes.
 If you are going to be using doing date math, please read the section L<How
 DateTime Math Works>.
 
-=head2 Time Zone Warnings
+=head2 Determining the Local Time Zone Can Be Slow
 
-Determining the local time zone for a system can be slow. If C<$ENV{TZ}> is
-not set, it may involve reading a number of files in F</etc> or elsewhere. If
-you know that the local time zone won't change while your code is running, and
-you need to make many objects for the local time zone, it is strongly
-recommended that you retrieve the local time zone once and cache it:
+If C<$ENV{TZ}> is not set, it may involve reading a number of files in F</etc>
+or elsewhere. If you know that the local time zone won't change while your
+code is running, and you need to make many objects for the local time zone, it
+is strongly recommended that you retrieve the local time zone once and cache
+it:
 
   our $App::LocalTZ = DateTime::TimeZone->new( name => 'local' );
 
@@ -2238,15 +2360,32 @@ implementation of C<DateTime::TimeZone> will use a huge amount of
 memory calculating all the DST changes from now until the future
 date. Use UTC or the floating time zone and you will be safe.
 
-=head2 Methods
+=head1 METHODS
 
-=head3 Constructors
+DateTime provide many methods. The documentation breaks them down into groups
+based on what they do (constructor, accessors, modifiers, etc.).
+
+=head2 Constructors
 
 All constructors can die when invalid parameters are given.
 
-=over 4
+=head3 Warnings
 
-=item * DateTime->new( ... )
+Currently, constructors will warn if you try to create a far future DateTime
+(year >= 5000) with any time zone besides floating or UTC. This can be very
+slow if the time zone has future DST transitions that need to be
+calculated. If the date is sufficiently far in the future this can be
+I<really> slow (minutes).
+
+All warnings from DateTime use the C<DateTime> category and can be suppressed
+with:
+
+    no warnings 'DateTime';
+
+This warning may be removed in the future if L<DateTime::TimeZone> is made
+much faster.
+
+=head3 DateTime->new( ... )
 
 This class method accepts parameters for each date and time component:
 "year", "month", "day", "hour", "minute", "second", "nanosecond".
@@ -2325,8 +2464,6 @@ The "formatter" can be either a scalar or an object, but the class
 specified by the scalar or the object must implement a
 C<format_datetime()> method.
 
-=back
-
 =head4 Parsing Dates
 
 B<This module does not parse dates!> That means there is no
@@ -2385,9 +2522,7 @@ no 02:00:00 through 02:59:59 on April 6!
 Attempting to create an invalid time currently causes a fatal error.
 This may change in future version of this module.
 
-=over 4
-
-=item * DateTime->from_epoch( epoch => $epoch, ... )
+=head3 DateTime->from_epoch( epoch => $epoch, ... )
 
 This class method can be used to construct a new DateTime object from
 an epoch time instead of components. Just as with the C<new()>
@@ -2401,7 +2536,7 @@ places, it will be truncated to nine, so that 1.1234567891 will become
 
 By default, the returned object will be in the UTC time zone.
 
-=item * DateTime->now( ... )
+=head3 DateTime->now( ... )
 
 This class method is equivalent to calling C<from_epoch()> with the
 value returned from Perl's C<time()> function. Just as with the
@@ -2409,13 +2544,13 @@ C<new()> method, it accepts "time_zone" and "locale" parameters.
 
 By default, the returned object will be in the UTC time zone.
 
-=item * DateTime->today( ... )
+=head3 DateTime->today( ... )
 
 This class method is equivalent to:
 
-  DateTime->now->truncate( to => 'day' );
+  DateTime->now(@_)->truncate( to => 'day' );
 
-=item * DateTime->from_object( object => $object, ... )
+=head3 DateTime->from_object( object => $object, ... )
 
 This class method can be used to construct a new DateTime object from
 any object that implements the C<utc_rd_values()> method. All
@@ -2429,13 +2564,13 @@ object.
 
 Otherwise, the returned object will be in the floating time zone.
 
-=item * DateTime->last_day_of_month( ... )
+=head3 DateTime->last_day_of_month( ... )
 
 This constructor takes the same arguments as can be given to the
 C<new()> method, except for "day". Additionally, both "year" and
 "month" are required.
 
-=item * DateTime->from_day_of_year( ... )
+=head3 DateTime->from_day_of_year( ... )
 
 This constructor takes the same arguments as can be given to the
 C<new()> method, except that it does not accept a "month" or "day"
@@ -2443,144 +2578,136 @@ argument. Instead, it requires both "year" and "day_of_year". The
 day of year must be between 1 and 366, and 366 is only allowed for
 leap years.
 
-=item * $dt->clone()
+=head3 $dt->clone()
 
 This object method returns a new object that is replica of the object
 upon which the method is called.
 
-=back
-
-=head3 "Get" Methods
+=head2 "Get" Methods
 
 This class has many methods for retrieving information about an
 object.
 
-=over 4
-
-=item * $dt->year()
+=head3 $dt->year()
 
 Returns the year.
 
-=item * $dt->ce_year()
+=head3 $dt->ce_year()
 
 Returns the year according to the BCE/CE numbering system. The year
 before year 1 in this system is year -1, aka "1 BCE".
 
-=item * $dt->era_name()
+=head3 $dt->era_name()
 
 Returns the long name of the current era, something like "Before
 Christ". See the L<Locales|/Locales> section for more details.
 
-=item * $dt->era_abbr()
+=head3 $dt->era_abbr()
 
 Returns the abbreviated name of the current era, something like "BC".
 See the L<Locales|/Locales> section for more details.
 
-=item * $dt->christian_era()
+=head3 $dt->christian_era()
 
 Returns a string, either "BC" or "AD", according to the year.
 
-=item * $dt->secular_era()
+=head3 $dt->secular_era()
 
 Returns a string, either "BCE" or "CE", according to the year.
 
-=item * $dt->year_with_era()
+=head3 $dt->year_with_era()
 
 Returns a string containing the year immediately followed by its era
 abbreviation. The year is the absolute value of C<ce_year()>, so that
 year 1 is "1AD" and year 0 is "1BC".
 
-=item * $dt->year_with_christian_era()
+=head3 $dt->year_with_christian_era()
 
 Like C<year_with_era()>, but uses the christian_era() method to get the era
 name.
 
-=item * $dt->year_with_secular_era()
+=head3 $dt->year_with_secular_era()
 
 Like C<year_with_era()>, but uses the secular_era() method to get the
 era name.
 
-=item * $dt->month()
+=head3 $dt->month()
 
 Returns the month of the year, from 1..12.
 
 Also available as C<< $dt->mon() >>.
 
-=item * $dt->month_name()
+=head3 $dt->month_name()
 
 Returns the name of the current month. See the
 L<Locales|/Locales> section for more details.
 
-=item * $dt->month_abbr()
+=head3 $dt->month_abbr()
 
 Returns the abbreviated name of the current month. See the
 L<Locales|/Locales> section for more details.
 
-=item * $dt->day()
+=head3 $dt->day()
 
 Returns the day of the month, from 1..31.
 
 Also available as C<< $dt->mday() >> and C<< $dt->day_of_month() >>.
 
-=item * $dt->day_of_week()
+=head3 $dt->day_of_week()
 
 Returns the day of the week as a number, from 1..7, with 1 being
 Monday and 7 being Sunday.
 
 Also available as C<< $dt->wday() >> and C<< $dt->dow() >>.
 
-=item * $dt->local_day_of_week()
+=head3 $dt->local_day_of_week()
 
 Returns the day of the week as a number, from 1..7. The day
 corresponding to 1 will vary based on the locale.
 
-=item * $dt->day_name()
+=head3 $dt->day_name()
 
 Returns the name of the current day of the week. See the
 L<Locales|/Locales> section for more details.
 
-=item * $dt->day_abbr()
+=head3 $dt->day_abbr()
 
 Returns the abbreviated name of the current day of the week. See the
 L<Locales|/Locales> section for more details.
 
-=item * $dt->day_of_year()
+=head3 $dt->day_of_year()
 
 Returns the day of the year.
 
 Also available as C<< $dt->doy() >>.
 
-=item * $dt->quarter()
+=head3 $dt->quarter()
 
 Returns the quarter of the year, from 1..4.
 
-=item * $dt->quarter_name()
+=head3 $dt->quarter_name()
 
 Returns the name of the current quarter. See the
 L<Locales|/Locales> section for more details.
 
-=item * $dt->quarter_abbr()
+=head3 $dt->quarter_abbr()
 
 Returns the abbreviated name of the current quarter. See the
 L<Locales|/Locales> section for more details.
 
-=item * $dt->day_of_quarter()
+=head3 $dt->day_of_quarter()
 
 Returns the day of the quarter.
 
 Also available as C<< $dt->doq() >>.
 
-=item * $dt->weekday_of_month()
+=head3 $dt->weekday_of_month()
 
 Returns a number from 1..5 indicating which week day of the month this
 is. For example, June 9, 2003 is the second Monday of the month, and
 so this method returns 2 for that day.
 
-=item * $dt->ymd( $optional_separator )
-
-=item * $dt->mdy( $optional_separator )
-
-=item * $dt->dmy( $optional_separator )
+=head3 $dt->ymd( $optional_separator ), $dt->mdy(...), $dt->dmy(...)
 
 Each method returns the year, month, and day, in the order indicated
 by the method name. Years are zero-padded to four digits. Months and
@@ -2591,74 +2718,77 @@ overridden by passing a value to the method.
 
 The C<< $dt->ymd() >> method is also available as C<< $dt->date() >>.
 
-=item * $dt->hour()
+=head3 $dt->hour()
 
 Returns the hour of the day, from 0..23.
 
-=item * $dt->hour_1()
+=head3 $dt->hour_1()
 
 Returns the hour of the day, from 1..24.
 
-=item * $dt->hour_12()
+=head3 $dt->hour_12()
 
 Returns the hour of the day, from 1..12.
 
-=item * $dt->hour_12_0()
+=head3 $dt->hour_12_0()
 
 Returns the hour of the day, from 0..11.
 
-=item * $dt->am_or_pm()
+=head3 $dt->am_or_pm()
 
 Returns the appropriate localized abbreviation, depending on the
 current hour.
 
-=item * $dt->minute()
+=head3 $dt->minute()
 
 Returns the minute of the hour, from 0..59.
 
 Also available as C<< $dt->min() >>.
 
-=item * $dt->second()
+=head3 $dt->second()
 
 Returns the second, from 0..61. The values 60 and 61 are used for
 leap seconds.
 
 Also available as C<< $dt->sec() >>.
 
-=item * $dt->fractional_second()
+=head3 $dt->fractional_second()
 
 Returns the second, as a real number from 0.0 until 61.999999999
 
 The values 60 and 61 are used for leap seconds.
 
-=item * $dt->millisecond()
+=head3 $dt->millisecond()
 
 Returns the fractional part of the second as milliseconds (1E-3 seconds).
 
 Half a second is 500 milliseconds.
 
-=item * $dt->microsecond()
+This value will always be rounded down to the nearest integer.
+
+=head3 $dt->microsecond()
 
 Returns the fractional part of the second as microseconds (1E-6
-seconds). This value will be rounded to an integer.
+seconds).
 
-Half a second is 500_000 microseconds. This value will be rounded to
-an integer.
+Half a second is 500_000 microseconds.
 
-=item * $dt->nanosecond()
+This value will always be rounded down to the nearest integer.
+
+=head3 $dt->nanosecond()
 
 Returns the fractional part of the second as nanoseconds (1E-9 seconds).
 
 Half a second is 500_000_000 nanoseconds.
 
-=item * $dt->hms( $optional_separator )
+=head3 $dt->hms( $optional_separator )
 
 Returns the hour, minute, and second, all zero-padded to two digits.
 If no separator is specified, a colon (:) is used by default.
 
 Also available as C<< $dt->time() >>.
 
-=item * $dt->datetime()
+=head3 $dt->datetime()
 
 This method is equivalent to:
 
@@ -2666,12 +2796,12 @@ This method is equivalent to:
 
 Also available as C<< $dt->iso8601() >>.
 
-=item * $dt->is_leap_year()
+=head3 $dt->is_leap_year()
 
 This method returns a true or false indicating whether or not the
 datetime object is in a leap year.
 
-=item * $dt->week()
+=head3 $dt->week()
 
  ($week_year, $week_number) = $dt->week;
 
@@ -2688,15 +2818,15 @@ is in, but dates at the very beginning of a calendar year often end up
 in the last week of the prior year, and similarly, the final few days
 of the year may be placed in the first week of the next year.
 
-=item * $dt->week_year()
+=head3 $dt->week_year()
 
 Returns the year of the week. See C<< $dt->week() >> for details.
 
-=item * $dt->week_number()
+=head3 $dt->week_number()
 
 Returns the week of the year, from 1..53. See C<< $dt->week() >> for details.
 
-=item * $dt->week_of_month()
+=head3 $dt->week_of_month()
 
 The week of the month, from 0..5. The first week of the month is the
 first week that contains a Thursday. This is based on the ICU
@@ -2704,42 +2834,40 @@ definition of week of month, and correlates to the ISO8601 week of
 year definition. A day in the week I<before> the week with the first
 Thursday will be week 0.
 
-=item * $dt->jd()
-
-=item * $dt->mjd()
+=head3 $dt->jd(), $dt->mjd()
 
 These return the Julian Day and Modified Julian Day, respectively.
 The value returned is a floating point number. The fractional portion
 of the number represents the time portion of the datetime.
 
-=item * $dt->time_zone()
+=head3 $dt->time_zone()
 
 This returns the C<DateTime::TimeZone> object for the datetime object.
 
-=item * $dt->offset()
+=head3 $dt->offset()
 
 This returns the offset from UTC, in seconds, of the datetime object
 according to the time zone.
 
-=item * $dt->is_dst()
+=head3 $dt->is_dst()
 
 Returns a boolean indicating whether or not the datetime object is
 currently in Daylight Saving Time or not.
 
-=item * $dt->time_zone_long_name()
+=head3 $dt->time_zone_long_name()
 
 This is a shortcut for C<< $dt->time_zone->name >>. It's provided so
 that one can use "%{time_zone_long_name}" as a strftime format
 specifier.
 
-=item * $dt->time_zone_short_name()
+=head3 $dt->time_zone_short_name()
 
 This method returns the time zone abbreviation for the current time
 zone, such as "PST" or "GMT". These names are B<not> definitive, and
 should not be used in any application intended for general use by
 users around the world.
 
-=item * $dt->strftime( $format, ... )
+=head3 $dt->strftime( $format, ... )
 
 This method implements functionality similar to the C<strftime()>
 method in C. However, if given multiple format strings, then it will
@@ -2751,7 +2879,7 @@ strftime patterns.
 If you give a pattern that doesn't exist, then it is simply treated as
 text.
 
-=item * $dt->format_cldr( $format, ... )
+=head3 $dt->format_cldr( $format, ... )
 
 This method implements formatting based on the CLDR date patterns. If
 given multiple format strings, then it will return multiple scalars,
@@ -2763,7 +2891,7 @@ patterns.
 If you give a pattern that doesn't exist, then it is simply treated as
 text.
 
-=item * $dt->epoch()
+=head3 $dt->epoch()
 
 Return the UTC epoch value for the datetime object. Internally, this
 is implemented using C<Time::Local>, which uses the Unix epoch even on
@@ -2781,58 +2909,64 @@ may not handle epochs before 1904 or after 2038 (depending on the size
 of your system's integers, and whether or not Perl was compiled with
 64-bit int support).
 
-=item * $dt->hires_epoch()
+=head3 $dt->hires_epoch()
 
 Returns the epoch as a floating point number. The floating point
 portion of the value represents the nanosecond value of the object.
 This method is provided for compatibility with the C<Time::HiRes>
 module.
 
-=item * $dt->is_finite()
+Note that this method suffers from the imprecision of floating point numbers,
+and the result may end up rounded to an arbitrary degree depending on your
+platform.
 
-=item * $dt->is_infinite()
+    my $dt = DateTime->new( year => 2012, nanosecond => 4 );
+    say $dt->hires_repoch();
+
+On my system, this simply prints C<1325376000> because adding C<0.000000004>
+to C<1325376000> returns C<1325376000>.
+
+=head3 $dt->is_finite(), $dt->is_infinite()
 
 These methods allow you to distinguish normal datetime objects from
 infinite ones. Infinite datetime objects are documented in
 L<DateTime::Infinite|DateTime::Infinite>.
 
-=item * $dt->utc_rd_values()
+=head3 $dt->utc_rd_values()
 
 Returns the current UTC Rata Die days, seconds, and nanoseconds as a
 three element list. This exists primarily to allow other calendar
 modules to create objects based on the values provided by this object.
 
-=item * $dt->local_rd_values()
+=head3 $dt->local_rd_values()
 
 Returns the current local Rata Die days, seconds, and nanoseconds as a
 three element list. This exists for the benefit of other modules
 which might want to use this information for date math, such as
 C<DateTime::Event::Recurrence>.
 
-=item * $dt->leap_seconds()
+=head3 $dt->leap_seconds()
 
 Returns the number of leap seconds that have happened up to the
 datetime represented by the object. For floating datetimes, this
 always returns 0.
 
-=item * $dt->utc_rd_as_seconds()
+=head3 $dt->utc_rd_as_seconds()
 
 Returns the current UTC Rata Die days and seconds purely as seconds.
 This number ignores any fractional seconds stored in the object,
 as well as leap seconds.
 
-=item * $dt->locale()
+=head3 $dt->locale()
 
 Returns the current locale object.
 
-=item * $dt->formatter()
+=head3 $dt->formatter()
 
 Returns current formatter object or class. See L<Formatters And
 Stringification> for details.
 
-=back
-
-=head3 "Set" Methods
+=head2 "Set" Methods
 
 The remaining methods provided by C<DateTime.pm>, except where otherwise
 specified, return the object itself, thus making method chaining
@@ -2845,9 +2979,7 @@ possible. For example:
                 ->add( days => 1 )
                 ->subtract( seconds => 1 );
 
-=over 4
-
-=item * $dt->set( .. )
+=head3 $dt->set( .. )
 
 This method can be used to change the local components of a date time,
 or its locale. This method accepts any parameter allowed by the
@@ -2859,6 +2991,13 @@ C<new()> method.
 
 B<Do not use this method to do date math. Use the C<add()> and C<subtract()>
 methods instead.>
+
+=head3 $dt->set_year(), $dt->set_month(), etc.
+
+DateTime has a C<set_*> method for every item that can be passed to the
+constructor:
+
+=over 4
 
 =item * $dt->set_year()
 
@@ -2876,22 +3015,25 @@ methods instead.>
 
 =item * $dt->set_locale()
 
+=back
+
 These are shortcuts to calling C<set()> with a single key. They all
 take a single parameter.
 
-=item * $dt->truncate( to => ... )
+=head3 $dt->truncate( to => ... )
 
-This method allows you to reset some of the local time components in
-the object to their "zero" values. The "to" parameter is used to
-specify which values to truncate, and it may be one of "year",
-"month", "week", "day", "hour", "minute", or "second". For example,
-if "month" is specified, then the local day becomes 1, and the hour,
-minute, and second all become 0.
+This method allows you to reset some of the local time components in the
+object to their "zero" values. The "to" parameter is used to specify which
+values to truncate, and it may be one of "year", "month", "week", "local_week"
+"day", "hour", "minute", or "second". For example, if "month" is specified,
+then the local day becomes 1, and the hour, minute, and second all become 0.
 
-If "week" is given, then the datetime is set to the beginning of the
-week in which it occurs, and the time components are all set to 0.
+If "week" is given, then the datetime is set to the Monday of the week in
+which it occurs, and the time components are all set to 0. If you truncate to
+"local_week", then the first day of the week is locale-dependent. For example,
+in the C<en_US> locale, the first day of the week is Sunday.
 
-=item * $dt->set_time_zone( $tz )
+=head3 $dt->set_time_zone( $tz )
 
 This method accepts either a time zone object or a string that can be
 passed as the "name" parameter to C<< DateTime::TimeZone->new() >>.
@@ -2929,52 +3071,48 @@ work:
 
 Yes, now we can know "ni3 na4 bian1 ji2dian3?"
 
-=item * $dt->set_formatter( $formatter )
+=head3 $dt->set_formatter( $formatter )
 
 Set the formatter for the object. See L<Formatters And
 Stringification> for details.
 
 You can set this to C<undef> to revert to the default formatter.
 
-=back
-
-=head3 Math Methods
+=head2 Math Methods
 
 Like the set methods, math related methods always return the object
 itself, to allow for chaining:
 
   $dt->add( days => 1 )->subtract( seconds => 1 );
 
-=over 4
-
-=item * $dt->duration_class()
+=head3 $dt->duration_class()
 
 This returns C<DateTime::Duration>, but exists so that a subclass of
 C<DateTime.pm> can provide a different value.
 
-=item * $dt->add_duration( $duration_object )
+=head3 $dt->add_duration( $duration_object )
 
 This method adds a C<DateTime::Duration> to the current datetime. See
 the L<DateTime::Duration|DateTime::Duration> docs for more details.
 
-=item * $dt->add( DateTime::Duration->new parameters )
+=head3 $dt->add( DateTime::Duration->new parameters )
 
 This method is syntactic sugar around the C<add_duration()> method. It
 simply creates a new C<DateTime::Duration> object using the parameters
 given, and then calls the C<add_duration()> method.
 
-=item * $dt->subtract_duration( $duration_object )
+=head3 $dt->subtract_duration( $duration_object )
 
 When given a C<DateTime::Duration> object, this method simply calls
 C<invert()> on that object and passes that new duration to the
 C<add_duration> method.
 
-=item * $dt->subtract( DateTime::Duration->new parameters )
+=head3 $dt->subtract( DateTime::Duration->new parameters )
 
 Like C<add()>, this is syntactic sugar for the C<subtract_duration()>
 method.
 
-=item * $dt->subtract_datetime( $datetime )
+=head3 $dt->subtract_datetime( $datetime )
 
 This method returns a new C<DateTime::Duration> object representing
 the difference between the two dates. The duration is B<relative> to
@@ -2992,9 +3130,9 @@ as well as due to the presence of leap seconds.
 The returned duration may have deltas for months, days, minutes,
 seconds, and nanoseconds.
 
-=item * $dt->delta_md( $datetime )
+=head3 $dt->delta_md( $datetime )
 
-=item * $dt->delta_days( $datetime )
+=head3 $dt->delta_days( $datetime )
 
 Each of these methods returns a new C<DateTime::Duration> object
 representing some portion of the difference between two datetimes.
@@ -3010,14 +3148,14 @@ effectively ignore the time zone.
 Unlike the subtraction methods, B<these methods always return a
 positive (or zero) duration>.
 
-=item * $dt->delta_ms( $datetime )
+=head3 $dt->delta_ms( $datetime )
 
 Returns a duration which contains only minutes and seconds. Any day
 and month differences to minutes are converted to minutes and
 seconds. This method also B<always return a positive (or zero)
 duration>.
 
-=item * $dt->subtract_datetime_absolute( $datetime )
+=head3 $dt->subtract_datetime_absolute( $datetime )
 
 This method returns a new C<DateTime::Duration> object representing
 the difference between the two dates in seconds and nanoseconds. This
@@ -3025,20 +3163,14 @@ is the only way to accurately measure the absolute amount of time
 between two datetimes, since units larger than a second do not
 represent a fixed number of seconds.
 
-=back
+=head2 Class Methods
 
-=head3 Class Methods
-
-=over 4
-
-=item * DateTime->DefaultLocale( $locale )
+=head3 DateTime->DefaultLocale( $locale )
 
 This can be used to specify the default locale to be used when
 creating DateTime objects. If unset, then "en_US" is used.
 
-=item * DateTime->compare( $dt1, $dt2 )
-
-=item * DateTime->compare_ignore_floating( $dt1, $dt2 )
+=head3 DateTime->compare( $dt1, $dt2 ), DateTime->compare_ignore_floating( $dt1, $dt2 )
 
   $cmp = DateTime->compare( $dt1, $dt2 );
 
@@ -3074,7 +3206,22 @@ is equivalent to this:
 DateTime objects can be compared to any other calendar class that
 implements the C<utc_rd_values()> method.
 
-=back
+=head2 Testing Code That Uses DateTime
+
+If you are trying to test code that calls uses DateTime, you may want to be
+able to explicitly set the value returned by Perl's C<time()> builtin. This
+builtin is called by C<< DateTime->now() >> and C<< DateTime->today() >>.
+
+You can  override C<CORE::GLOBAL::time()>, but this  will only work if  you do
+this B<before> loading  DateTime. If doing this is inconvenient,  you can also
+override C<DateTime::_core_time()>:
+
+    no warnings 'redefine';
+    local *DateTime::_core_time = sub { return 42 };
+
+DateTime is guaranteed to core this subroutine to get the current C<time()>
+value. You can also override the C<_core_time()> sub in a subclass of DateTime
+and use that.
 
 =head2 How DateTime Math Works
 
@@ -3717,11 +3864,11 @@ The week of the month, from C<< $dt->week_of_month() >>.
 
 =item * d{1,2}
 
-The numeric day of of the month.
+The numeric day of the month.
 
 =item * D{1,3}
 
-The numeric day of of the year.
+The numeric day of the year.
 
 =item * F
 
@@ -3828,6 +3975,11 @@ The time zone offset.
 
 The time zone short name and the offset as one string, so something
 like "CDT-0500".
+
+=item * ZZZZZ
+
+The time zone offset as a sexagesimal number, so something like "-05:00".
+(This is useful for W3C format.)
 
 =item * v{1,3}
 
@@ -3953,6 +4105,8 @@ The fractional seconds digits. Default is 9 digits (nanoseconds).
   %3N   milliseconds (3 digits)
   %6N   microseconds (6 digits)
   %9N   nanoseconds  (9 digits)
+
+This value will always be rounded down to the nearest integer.
 
 =item * %p
 
@@ -4160,14 +4314,10 @@ Dave Rolsky <autarch@urth.org>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is Copyright (c) 2012 by Dave Rolsky.
+This software is Copyright (c) 2014 by Dave Rolsky.
 
 This is free software, licensed under:
 
   The Artistic License 2.0 (GPL Compatible)
 
 =cut
-
-
-__END__
-

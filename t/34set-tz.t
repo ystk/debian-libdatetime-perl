@@ -1,7 +1,8 @@
 use strict;
 use warnings;
 
-use Test::More;
+use Test::Fatal;
+use Test::More 0.88;
 
 use DateTime;
 
@@ -35,6 +36,43 @@ use DateTime;
 
     ok( !$dt->is_dst, 'is_dst should be false (1934-02-25 23:59:59)' );
     is( $dt->offset, -3600, 'offset should be -3600 (1934-02-25 23:59:59)' );
+}
+
+{
+    my $dt = DateTime->new(
+        year      => 2013,
+        month     => 3,
+        day       => 10,
+        hour      => 2,
+        minute    => 4,
+        time_zone => 'floating',
+    );
+
+    like(
+        exception { $dt->set_time_zone('America/Los_Angeles') },
+        qr/\QInvalid local time for date in time zone/,
+        'got an exception when trying to set time zone when it leads to invalid local time'
+    );
+
+    is(
+        $dt->time_zone()->name(),
+        'floating',
+        'time zone was not changed after set_time_zone() throws an exception'
+    );
+}
+
+{
+    my $dt = DateTime->now( time_zone => 'America/Chicago' );
+
+    ok(
+        $dt->set_time_zone('America/Chicago'),
+        'set_time_zone returns object when time zone name is same as current'
+    );
+
+    ok(
+        $dt->set_time_zone( $dt->time_zone() ),
+        'set_time_zone returns object when time zone object is same as current'
+    );
 }
 
 done_testing();

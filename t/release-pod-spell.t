@@ -37,10 +37,12 @@ Anno
 BCE
 CLDR
 CPAN
+DATETIME
 DateTime
 DateTimes
 Datetime
 Datetimes
+Domini
 EEEE
 EEEEE
 Flávio
@@ -73,6 +75,7 @@ Tsai
 UTC
 VVVV
 ZZZZ
+ZZZZZ
 afterwards
 bian
 ccc
@@ -82,7 +85,9 @@ conformant
 datetime
 datetime's
 datetimes
+decrement
 dian
+durations
 eee
 eeee
 eeeee
@@ -100,6 +105,8 @@ other's
 proleptic
 qqq
 qqqq
+sexagesimal
+subclasses
 uu
 vvvv
 wiki
