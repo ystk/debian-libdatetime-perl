@@ -1,3 +1,17 @@
+libdatetime-perl (2:1.12-1) unstable; urgency=medium
+
+  [ Salvatore Bonaccorso ]
+  * Update Vcs-Browser URL to cgit web frontend
+
+  [ gregor herrmann ]
+  * Add debian/upstream/metadata
+  * Imported Upstream version 1.12
+  * Add autopkgtest control file.
+  * Make (build) dependency on libdatetime-timezone-perl versioned.
+  * Explicitly build-depend on libmodule-build-perl.
+
+ -- gregor herrmann <gregoa@debian.org>  Sun, 07 Sep 2014 16:51:40 +0200
+
 libdatetime-perl (2:1.10-1) unstable; urgency=medium
 
   * New upstream release.

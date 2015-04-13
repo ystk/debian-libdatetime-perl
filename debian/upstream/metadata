@@ -1,0 +1,8 @@
+---
+Archive: CPAN
+Bug-Database: http://rt.cpan.org/NoAuth/Bugs.html?Dist=DateTime
+Bug-Submit: bug-datetime@rt.cpan.org
+Contact: Dave Rolsky <autarch@urth.org>
+Name: DateTime
+Repository: git://git.urth.org/DateTime.pm.git
+Repository-Browse: http://git.urth.org/DateTime.pm.git
